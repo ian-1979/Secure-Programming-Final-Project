@@ -1,0 +1,10 @@
+VALID QUERIES:
+
+./logappend -T 10 -K abc -E firstname lastname -A -R 1 log.txt
+./logappend -T 10 -K abc -E firstname lastname -A 
+
+
+INVALID QUERIES:
+./logappend -K abc -E firstname lastname -A -R 1 log.txt
+./logappend -T 10 -K -E firstname middlename lastname -A -R 1 log.txt
+./logappend -T 10 -K -E firstname lastname -G firstname lastname -A -R 1 log.txt
