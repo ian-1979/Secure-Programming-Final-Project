@@ -9,6 +9,7 @@ using namespace std;
 // logappend -B <file>
 
 void ProcessBatchFile(string);
+void ParseQuery(int, char**);
 void PrintQuery(int, char**);
 
 // List of functions that need implemented (not in order):
@@ -26,12 +27,13 @@ void PrintQuery(int, char**);
 int main(int argc, char* argv[]) {
 
     PrintQuery(argc, argv);
+
     if(strcmp(argv[1],"-B") == 0)
     {
         ProcessBatchFile(argv[2]);
     } else if(strcmp(argv[1],"-T") == 0)
     {
-        
+
     } else
     {
         //error: invalid input
@@ -41,17 +43,20 @@ int main(int argc, char* argv[]) {
 
 void ProcessBatchFile(string batchName)
 {
+    // -B <file>
+    // batch file, contains list of commands without logappend beginning
+    // -B cannot appear within the batch file
     cout << batchName << endl;
 }
 
 void ParseQuery(int argc, char* query[]){
-    // -B <file>
-    // batch file, contains list of commands without logappend beginning
-    // -B cannot appear within the batch file
+    string logOutput;
+    
+    //check for -B, cannot appear in parse query
     
     // -T <timestamp>
     // time is measured in seconds since the gallery opened
-
+    
 
     // -K <token>
 
