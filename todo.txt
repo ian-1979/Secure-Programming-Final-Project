@@ -1,0 +1,58 @@
+OVERVIEW - https://course.ece.cmu.edu/~ece732/s24/homework/bibifi/overview.html
+
+QUESTIONS=======================================================================================
+
+Group
+- how do we structure the log file?
+- how do we want to split up the work?
+- make an example log file to guide our work? can be used as goal for logappend to replicate the example file, can be processed by logread
+
+questions for prof
+- do we need to contact other groups on our own or will we have class time to analyze their code?
+- do we need to run anything on a server with web components? do we need to use SQL? or is the entire program within the two cpp files and on log file
+
+
+PROGRAM REQS ===============================================================================
+
+LOGAPPEND REQS - https://course.ece.cmu.edu/~ece732/s24/homework/bibifi/logappend.html
+
+logappend -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
+logappend -B <file>
+
+- input validation - can probably be reused in logread
+- process queries
+- handle errors
+- encryption
+- documentation
+
+====================================================================================================================
+
+LOGREAD REQS - https://course.ece.cmu.edu/~ece732/s24/homework/bibifi/logread.html
+
+logread -K <token> -S <log>
+logread -K <token> -R (-E <name> | -G <name>) <log>
+
+- input validation
+- process queries
+- handle errors
+- decryption
+- documentation
+
+======================================================================================================================
+
+POSSIBLE ERRORS
+
+- inconsistent security tokens when writing to same log file
+- logappend query missing essential information
+- batch file contains reference to another batch file
+- extra arguments in queries
+- batch file contains unusable query
+- 
+
+
+
+
+
+EXAMPLES
+https://course.ece.cmu.edu/~ece732/s24/homework/bibifi/examples.html
+
