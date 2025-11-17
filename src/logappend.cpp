@@ -3,36 +3,37 @@
 #include <fstream>
 #include <string>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
+#include "openssl/sha.h"
 
 using namespace std;
 
-// Example Queries:
-// logappend -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
-// logappend -B <file>
-// -T 5 -K secret -L -E Fred -R 1 log1
+//Build Commands:
+// g++ -o logappend logappend.cpp -lssl -lcrypto
+// Usage:
+// ./logappend <query>
 
-void ProcessBatchFile(string); // working on
+//  Query Format:
+// ./logappend -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
+// ./logappend -B <file>
+
+// Example Query:
+// ./logappend -T 5 -K secret -L -E Fred -R 1 log1
+
+// To-do:
+// Implement Time Travel Check
+// Implement Log File Encryption - AES
+// Implement Input Sanitization - regex
+
+void ProcessBatchFile(string); 
 bool ParseQuery(int, char**);
 void PrintQuery(int, char**);
 bool CheckToken(string, string);
 bool CheckLogExists(string);
 void CreateLog(string, string);
-string GetHashedToken(string);
 bool CheckTimeTravel(string, int); // Checks if the timestamp goes backwards 
-
-// List of functions that need implemented (not in order):
-// Parse Query X
-// Write to Temp File
-// Set Token of File
-// 
-// Sanitize Input
-// Read Batch File
-// 
-// Convert Temp to Final
-// Encrypt Log File
-// Check Token Against Log File Name 
-
-
+string sha256(const std::string);
 
 int main(int argc, char* argv[]) {
 
@@ -71,7 +72,7 @@ int main(int argc, char* argv[]) {
                 //log file exists, check token, then write query to log file
                 // ===LATER=== if valid, check if the logic is consistent (going back in time, leaving a room never entered)
                 //for now, if valid write to log file
-                if (CheckToken(argv[10], argv[4]) == false)
+                if (CheckToken(argv[10], sha256(argv[4])) == false)
                 {
                     cout << "Error: Invalid Token" << endl;
                 }
@@ -107,8 +108,9 @@ void ProcessBatchFile(string batchName)
     {
         cout << "Processing line: " << line << endl;
         //split line into arguments
-        const int MAX_ARGS = 20;
+        const int MAX_ARGS = 11;
         char* args[MAX_ARGS];
+        args[0] = const_cast<char*>("");
         int argc = 1;
         char* token = strtok(const_cast<char*>(line.c_str()), " ");
         while (token != nullptr && argc < MAX_ARGS)
@@ -128,7 +130,7 @@ void ProcessBatchFile(string batchName)
             if (CheckLogExists(args[10]) == false)
             {
                 //create log file with token
-                CreateLog(args[10], args[4]);
+                CreateLog(args[10], sha256(args[4]));
                 //write query to log file
                 cout << "Writing to new log file: " << args[10] << endl;
                 ofstream logfile;
@@ -143,7 +145,7 @@ void ProcessBatchFile(string batchName)
             else 
             {
                 //log file exists, check token, then write query to log file
-                if (CheckToken(args[10], args[4]) == false)
+                if (CheckToken(args[10], sha256(args[4])) == false)
                 {
                     cout << "Error: Invalid Token in Batch File" << endl;
                 }
@@ -220,7 +222,7 @@ bool ParseQuery(int argc, char* query[]){
     }
 
     // Check that token matches log file token
-    if (CheckToken(query[10], query[4]) == false)
+    if (CheckToken(query[10], sha256(query[4])) == false)
     {
         cout << "Error - Invalid Query: Incorrect Token" << endl;
         return false;
@@ -231,7 +233,6 @@ bool ParseQuery(int argc, char* query[]){
 
 // check if query token matches log file token
 // hash token, compare against first line of log file
-// CHANGE TO HASH TOKENS LATER ========================================
 bool CheckToken(string logName, string k) 
 {
     ifstream file;
@@ -242,6 +243,8 @@ bool CheckToken(string logName, string k)
         if(strcmp(token.c_str(), k.c_str()) != 0)
         {
             cout << "Error: Token does not match log file token" << endl;
+            cout << "Log Token: " << token << endl;
+            cout << "Provided Token: " << k << endl;
             file.close();
             return false;
         }
@@ -280,17 +283,23 @@ void CreateLog(string fname, string token)
     }
     else 
     {
-        //hash token (for now just write token)
         file << token << endl;
         cout << "Log file created: " << fname << endl;
         file.close();
     }
 }
 
-string GetHashedToken(string token)
+string sha256(const string inputStr)
 {
-    //hash token
-    return token;
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    const unsigned char* data = (const unsigned char*)inputStr.c_str();
+    SHA256(data, inputStr.size(), hash);
+    stringstream ss;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+    {
+        ss << hex << setw(2) << setfill('0') << (int)hash[i];
+    }
+    return ss.str();
 }
 
 void PrintQuery(int argc, char* query[])
