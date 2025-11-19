@@ -24,7 +24,7 @@ using namespace std;
 // To-do:
 // Implement Time Travel Check
 // Implement Log File Encryption - AES
-// Implement Input Sanitization - regex
+// Implement Input Sanitization? - regex
 
 void ProcessBatchFile(string); 
 bool ParseQuery(int, char**);
@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
             if (CheckLogExists(argv[10]) == false)
             {
                 //create log file with token
-                CreateLog(argv[10], argv[4]);
+                CreateLog(argv[10], sha256(argv[4]));
                 //write query to log file
                 ofstream file;
                 file.open(string(argv[10]) + ".txt", std::ios::app);
