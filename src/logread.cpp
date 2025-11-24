@@ -7,7 +7,14 @@
 #include <string.h>
 #include <cstdlib>
 #include <sstream>
+#include <iomanip>
+#include "openssl/sha.h"
 using namespace std;
+
+// Build Commands:
+// g++ -o logread logread.cpp -lssl -lcrypto
+// Usage:
+// ./logread <query>
 
 // Example Queries : 
 // logread -K <token> -S <log>
@@ -43,13 +50,41 @@ void invalidTok(){
     exit(255); 
 }
 
+string sha256(const string inputStr)
+{
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    const unsigned char* data = (const unsigned char*)inputStr.c_str();
+    SHA256(data, inputStr.size(), hash);
+    stringstream ss;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+    {
+        ss << hex << setw(2) << setfill('0') << (int)hash[i];
+    }
+    return ss.str();
+}
+
 bool checkToken(const string& fileName, const string& currentToken){
     ifstream f(fileName);
-    if(!f.is_open()) printInvalid(); 
-
+    if(!f.is_open())
+    {
+        std::cout << "could not open file" << std::endl;
+        printInvalid(); 
+    } 
     string storedToken; 
-    if(!getline(f, storedToken)) invalidTok(); 
-    if(storedToken != currentToken) invalidTok(); 
+    if(!getline(f, storedToken))
+    {
+        std::cout << "stored token: " << storedToken << std::endl;
+        invalidTok(); 
+    } 
+    if(strcmp(storedToken.c_str(), sha256(currentToken).c_str()) != 0)
+    {
+        std::cout << "stored token: " << storedToken << std::endl;
+        std::cout << "curr token: " << sha256(currentToken) << std::endl;
+        invalidTok(); 
+    }
+    std::cout << "Token verified successfully!" << std::endl;
+    std::cout << "stored token: " << storedToken << std::endl;
+    std::cout << "curr token: " << sha256(currentToken) << std::endl;
 
     return true; 
 }
@@ -57,7 +92,10 @@ bool checkToken(const string& fileName, const string& currentToken){
 // Parse Log 
 void parseLog(const string& fileName){
     ifstream f(fileName); 
-    if(!f.is_open()) printInvalid(); 
+    if(!f.is_open()){
+        std::cout << "could not open file" << std::endl;
+        printInvalid(); 
+    }  
 
     string line; 
     getline(f, line); 
@@ -75,15 +113,23 @@ void parseLog(const string& fileName){
         }
         
         argument.push_back(line.substr(start));
-        if(argument.size() != 5) invalidTok(); 
+        if(argument.size() != 11)
+        {
+            std::cout << "invalid arg size: " << argument.size() << std::endl;
+            for(int i = 0; i < argument.size(); ++i){
+                std::cout << "arg " << i << ": " << argument[i] << std::endl;
+            }
+            invalidTok();
+        }
 
-        string action = argument[0];
-        string role = argument[1]; 
-        string name = argument[2]; 
-        int roomID = stoi(argument[3]); 
-        int time = stoi(argument[4]); 
+        string action = argument[4];
+        string role = argument[5]; 
+        string name = argument[6]; 
+        int roomID = stoi(argument[8]); 
+        int time = stoi(argument[1]); 
 
         map<string, PersonState>& group = (role == "E" ? employees : guests); 
+        
         PersonState& p = group[name]; 
 
         if(action == "A"){
@@ -195,6 +241,7 @@ void showRooms(const string& name, bool isEmployee){
 // Parse Query
 int main(int argc, char* argv[]){
    if(argc < 4){
+        std::cout << "not enough args" << std::endl;
         printInvalid(); 
    }
 
@@ -205,7 +252,10 @@ int main(int argc, char* argv[]){
    for(int i = 0; i < argc; ++i){
         string arg = argv[i]; 
         if(arg == "-K"){
-            if(i + 1 >= argc) printInvalid(); 
+            if(i + 1 >= argc){
+                std::cout << "token missing" << std::endl;
+                printInvalid();
+            }
             token = argv[++i];
         } else if(arg == "-S"){
             showS = true; 
@@ -215,19 +265,33 @@ int main(int argc, char* argv[]){
             isEmployee = (arg == "-E");
             if(i + 1 >= argc){
                 printInvalid();
+                std::cout << "name missing" << std::endl;
             }
             name = argv[++i];
         } else if(arg[0] != '-'){
-            logFile = arg; 
+            logFile = arg + ".txt"; 
         }
    }
 
-    if(token.empty() || logFile.empty()) printInvalid(); 
-    if(!showS && !showR) printInvalid(); 
+    if(token.empty() || logFile.empty())
+    
+    {
+        printInvalid();
+        std::cout << "log or token empty" << std::endl;
+    } 
+    if(!showS && !showR) 
+    {
+        printInvalid();
+        std::cout << "no action specified" << std::endl;
+    }
 
-    checkToken(logFile, token);
-    parseLog(logFile);
-
+    if (checkToken(logFile, token)) {
+        parseLog(logFile);
+    }else {
+        std::cout << "token check failed" << std::endl;
+        invalidTok();
+    }
+    
     if(showS) showState(); 
     if(showR) showRooms(name, isEmployee); 
 }
