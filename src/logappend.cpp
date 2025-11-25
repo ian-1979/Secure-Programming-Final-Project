@@ -5,12 +5,14 @@
 #include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <sqlite3.h>
+#include <filesystem>
 #include "openssl/sha.h"
 
 using namespace std;
 
 //Build Commands:
-// g++ -o logappend logappend.cpp -lssl -lcrypto
+// g++ -o logappend logappend.cpp -lssl -lcrypto -lsqlite3
 // Usage:
 // ./logappend <query>
 
@@ -22,20 +24,70 @@ using namespace std;
 // ./logappend -T 5 -K secret -L -E Fred -R 1 log1
 
 // To-do:
-// Implement Time Travel Check
+// Check DB exists X
+// Create DB X
+// Process Query to DB X
+// edit check token to look at first column
 // Implement Log File Encryption - AES
 // Implement Input Sanitization? - regex
 
 void ProcessBatchFile(string); 
 bool ParseQuery(int, char**);
+void ProcessQuery(int, char**);
+// Debugging Function
 void PrintQuery(int, char**);
+
+void CreateDB(string, string);
+bool CheckDBExists(string);
+bool CheckDBToken(string, string);
+//static int callback(void*, int, char**, char**);
+string sha256(const std::string);
+
+// deprecated
 bool CheckToken(string, string);
 bool CheckLogExists(string);
 void CreateLog(string, string);
-bool CheckTimeTravel(string, int); // Checks if the timestamp goes backwards 
-string sha256(const std::string);
 
-int main(int argc, char* argv[]) {
+
+
+int main(int argc, char* argv[]) 
+{
+    //check if query is batch file
+    if(strcmp(argv[1], "-B") == 0)
+    {
+        ProcessBatchFile(argv[2]);
+    }
+
+    //check if normal query and valid
+    else if(strcmp(argv[1], "-T") == 0)
+    {
+        if (ParseQuery(argc, argv) == false)
+        {
+            cout << "Error: Invalid Query" << endl;
+        }
+        else 
+        {
+            //valid query, check if log file exists
+            if (CheckDBExists(argv[10]) == false)
+            {
+                // create db file with token
+                // first entry in db is a blank entry that only contains the token
+                CreateDB(argv[10], sha256(argv[4]));
+                ProcessQuery(argc, argv);
+            }else
+            {
+                if (CheckDBToken(argv[10], sha256(argv[4])) == false)
+                {
+                    cout << "Error: Invalid Token" << endl;
+                }
+            }
+        }
+    }
+
+} 
+
+/*
+    ==========OLD MAIN==========
 
     //check if query is batch file
     if(strcmp(argv[1], "-B") == 0)
@@ -56,7 +108,8 @@ int main(int argc, char* argv[]) {
             if (CheckLogExists(argv[10]) == false)
             {
                 //create log file with token
-                CreateLog(argv[10], sha256(argv[4]));
+                //CreateLog(argv[10], sha256(argv[4]));
+                CreateDB(argv[10], sha256(argv[4]));
                 //write query to log file
                 ofstream file;
                 file.open(string(argv[10]) + ".txt", std::ios::app);
@@ -94,7 +147,7 @@ int main(int argc, char* argv[]) {
         cout << "Error: Invalid Query" << endl;
     }
 
-} 
+*/
 
 void ProcessBatchFile(string batchName)
 {
@@ -167,10 +220,61 @@ void ProcessBatchFile(string batchName)
     file.close();
 }
 
+int callbackB(void *data, int count, char **argv, char **columnNames){
+    //1st parameter of this function is received from 4th parameter of sqlite3_exec
+    //count -> is the number of columns
+    //columnNames ->  array of pointers to strings where each entry represents the name of corresponding result column as obtained
+    //argv -> array of pointers to strings obtained as if from [sqlite3_column_text()]
+
+   int i;
+   for(i = 0; i<count; i++) {
+      printf("Col: %s = %s\n", columnNames[i], argv[i]);
+   }
+   printf("\n");
+   return 0;
+}
+
+static int callbackC(void *count, int argc, char **argv, char **azColName) {
+    int *c = (int*)count;
+    *c = atoi(argv[0]);
+    return 0;
+}
+
+void ProcessQuery(int argc, char* query[])
+{
+    //SQL variables
+    sqlite3 *db;
+    char *errMsg = 0;
+    int rc;
+    int count = 0;
+
+    //query variables
+    string time = query[2];
+    string token = sha256(query[4]);
+    string AL = query[5];
+    string name = query[7];
+    string EG = query[6];
+    string roomid = query[9];
+
+    std::cout << "filename: " << query[10] << std::endl;
+
+    string dbname = string(query[10]) + ".db";
+
+    rc = sqlite3_open(dbname.c_str(), &db);
+    rc = sqlite3_exec(db, "select count(*) from LOGFILE", callbackC, &count, &errMsg);
+
+    string sql = "INSERT INTO LOGFILE (ID, TOKEN, TIME, NAME, EG, AL, ROOMID) "
+                "VALUES("+std::to_string(count)+",'"+token+"','"+time+"','"+name+"','"+EG+"','"+AL+"','"+roomid+"')";
+    
+    rc = sqlite3_exec(db, sql.c_str(), callbackC, 0, &errMsg);
+
+    
+}
 
 // Make sure that query is valid before writing to log file
 bool ParseQuery(int argc, char* query[]){
     bool valid = true;
+
     //cout << "argc: " << argc << endl;
 
     // Check if query has correct number of arguments
@@ -214,20 +318,22 @@ bool ParseQuery(int argc, char* query[]){
         return false;
     }
 
-    // -R <room-id> room-id is an int, if not room-id specified, then event is for whole gallery
+
+    // -R <room-id> room-id is an int
     if (strcmp(query[8], "-R") != 0)
     {
         cout << "Error - Invalid Query: Missing Room" << endl;
         return false;
     }
 
+    /*
     // Check that token matches log file token
     if (CheckToken(query[10], sha256(query[4])) == false)
     {
         cout << "Error - Invalid Query: Incorrect Token" << endl;
         return false;
     }
-
+    */
     return true;
 }
 
@@ -252,6 +358,52 @@ bool CheckToken(string logName, string k)
     return true;
 }
 
+bool CheckDBToken(string dbname, string k)
+{
+    bool valid = false;
+    std::cout << "check token" << std::endl;
+    sqlite3 *db;
+    sqlite3_stmt *stmt;
+    char *errMsg = 0;
+    int rc;
+    string tk;
+
+    rc = sqlite3_open((dbname + ".db").c_str(), &db);
+    const char *sql = "SELECT TOKEN FROM LOGFILE WHERE ID = 0;";
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement: " << sqlite3_errmsg(db) << std::endl;
+        sqlite3_close(db);
+        return 1;
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char *token = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        std::cout << "token: " << token << std::endl;
+        tk = token;
+    } else {
+        std::cerr << "No rows found or error executing query" << std::endl;
+    }
+    
+
+    if(strcmp(tk.c_str(), k.c_str()) != 0)
+    {
+        cout << "Error: Token does not match log file token" << endl;
+        cout << "Log Token: " << tk << endl;
+        cout << "Provided Token: " << k << endl;
+        valid = false;
+    }else
+    {
+        std::cout << "they same :)" << std::endl;
+        cout << "Log Token: " << tk << endl;
+        cout << "Provided Token: " << k << endl;
+        valid = true;
+    }
+    
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return valid;
+}
 
 // check if log file specified exists, if not, create log file and assign token
 bool CheckLogExists(string fname) 
@@ -271,6 +423,12 @@ bool CheckLogExists(string fname)
     }
 }
 
+// check if database exists
+bool CheckDBExists(string dbname)
+{
+    return std::filesystem::exists(dbname + ".db");
+}
+
 // create log file with specified token
 // set hash as first line of log
 void CreateLog(string fname, string token) 
@@ -287,6 +445,47 @@ void CreateLog(string fname, string token)
         cout << "Log file created: " << fname << endl;
         file.close();
     }
+}
+
+
+void CreateDB(string dbname, string token)
+{
+    sqlite3 *db;
+    char *errMsg = 0;
+    int rc;
+
+    rc = sqlite3_open((dbname + ".db").c_str(), &db);
+
+    if( rc ) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+    } else {
+        fprintf(stderr, "Opened database successfully\n");
+    }
+
+    string sql = "CREATE TABLE LOGFILE("  \
+      "ID INT PRIMARY KEY," \
+      "TOKEN CHAR(128)," \
+      "TIME           INT," \
+      "NAME            CHAR(50)," \
+      "EG        CHAR(10)," \
+      "AL       CHAR(10)," \
+      "ROOMID          INT);";
+
+    rc = sqlite3_exec(db, sql.c_str(), callbackC, 0, &errMsg);
+   
+    sql = "INSERT INTO LOGFILE (ID, TOKEN, TIME, NAME, EG, AL, ROOMID) "
+                "VALUES(0,'"+token+"','','','','','')";
+
+    rc = sqlite3_exec(db, sql.c_str(), callbackC, 0, &errMsg);
+
+    if( rc != SQLITE_OK ){
+        fprintf(stderr, "SQL error: %s\n", errMsg);
+        sqlite3_free(errMsg);
+    } else {
+        fprintf(stdout, "Table created successfully\n");
+    }
+
+    sqlite3_close(db);
 }
 
 string sha256(const string inputStr)
