@@ -1,13 +1,13 @@
-===== GROUP INFORMATION =====
+## GROUP INFORMATION 
 
 Group #5: Adrion Thomas and Ian Scheetz
 
-===== LIBRARIES USED =====
+## LIBRARIES USED 
 
 - OpenSSL
 - SQLite3
 
-===== BUILD INSTRUCTIONS =====
+## BUILD INSTRUCTIONS 
 
 - Logappend:
 
@@ -39,7 +39,7 @@ Example Queries:
 ./logread -K secret -S log1
 ./logread -K secret -R -E Fred log1
 
-===== LOGAPPEND DOCUMENTATION =====
+## LOGAPPEND DOCUMENTATION
 
 Query Functions:
 - void ProcessBatchFileDB(string): Loops through a text file of queries and processes them into the database.
@@ -54,7 +54,9 @@ Database Functions:
 - string AESEncryptDB(string, string): AES implementation that is used to encrypt any string using the specified token. It uses the hash of the token as the key.
 
 
-===== LOGREAD DOCUMENTATION =====
+## LOGREAD DOCUMENTATION
 
+
+## TEST SUITE INSTRUCTIONS 
 
 
