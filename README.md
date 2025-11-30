@@ -11,30 +11,30 @@
 ### Logappend
 
 Build Commands:
-g++ -o logappend logappend.cpp -lssl -lcrypto -lsqlite3
-./logappend <query>
+`g++ -o logappend logappend.cpp -lssl -lcrypto -lsqlite3`
+`./logappend <query>`
 
 Query Format:
-./logappend -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
-./logappend -B <file>
+`./logappend -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>`
+`./logappend -B <file>`
 
 Example Queries:
-./logappend -T 5 -K secret -A -E Fred -R 1 log1
-./logappend -T 10 -K secret -L -G Alice -R 1 log1
+`./logappend -T 5 -K secret -A -E Fred -R 1 log1`
+`./logappend -T 10 -K secret -L -G Alice -R 1 log1`
 
 ### Logread
 
 Build Commands:
-g++ -o logread logread.cpp -lssl -lcrypto -lsqlite3
-./logread <query>
+`g++ -o logread logread.cpp -lssl -lcrypto -lsqlite3`
+`./logread <query>`
 
 Query Format:
-logread -K <token> -S <log>
-logread -K <token> -R (-E <name> | -G <name>) <log>
+`./logread -K <token> -S <log>`
+`./logread -K <token> -R (-E <name> | -G <name>) <log>`
 
 Example Queries:
-./logread -K secret -S log1
-./logread -K secret -R -E Fred log1
+`./logread -K secret -S log1`
+`./logread -K secret -R -E Fred log1`
 
 ## Security Considerations
 
