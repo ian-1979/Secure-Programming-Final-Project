@@ -8,8 +8,13 @@
 #include <cstdlib>
 #include <sstream>
 #include <iomanip>
-#include <openssl/sha.h>
 #include <sqlite3.h>
+#include <openssl/sha.h>
+#include <openssl/aes.h>
+#include <openssl/rand.h>
+#include <openssl/evp.h>
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
 
 using namespace std;
 
@@ -65,6 +70,45 @@ string sha256(const string inputStr){
     return ss.str();
 }
 
+string AESDecryptDB(string ctxt, string token)
+{
+    string ptxt = "";
+    
+    // key and iv initialization
+    unsigned char key[32];
+    unsigned char iv[AES_BLOCK_SIZE];
+    memcpy(key, token.substr(0, 32).c_str(), 32);
+    memcpy(iv, token.substr(32, 16).c_str(), AES_BLOCK_SIZE);
+
+    // Base64 decode the ciphertext
+    BIO *bio, *b64;
+    unsigned char decoded_ctxt[128];
+    int decoded_len;
+
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_new_mem_buf(ctxt.c_str(), ctxt.length());
+    bio = BIO_push(b64, bio);
+    decoded_len = BIO_read(bio, decoded_ctxt, sizeof(decoded_ctxt));
+    BIO_free_all(bio);
+
+    // AES decryption using EVP_DecryptInit_ex
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
+    
+    unsigned char plaintext[128];
+    int len;
+    EVP_DecryptUpdate(ctx, plaintext, &len, decoded_ctxt, decoded_len);
+    int plaintext_len = len;
+
+    EVP_DecryptFinal_ex(ctx, plaintext + len, &len);
+    plaintext_len += len;
+
+    ptxt = string((char*)plaintext, plaintext_len);
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ptxt;    
+}
+
 bool checkToken(sqlite3 *db, const string &currentToken){
     const char *sql = "SELECT TOKEN FROM LOGFILE WHERE ID = 0";
     sqlite3_stmt *stmt;
@@ -91,7 +135,7 @@ bool checkToken(sqlite3 *db, const string &currentToken){
 
     string givenHash = sha256(currentToken);
 
-    if (storedHash != givenHash){
+    if (strcmp(storedHash.c_str(), givenHash.c_str()) != 0){
         invalidTok();
     }
 
@@ -99,7 +143,7 @@ bool checkToken(sqlite3 *db, const string &currentToken){
 }
 
 // Parse Log
-void parseLog(sqlite3 *db){
+void parseLog(sqlite3 *db, string token){
     const char *sql =
         "SELECT TIME, NAME, EG, AL, ROOMID "
         "FROM LOGFILE "
@@ -112,18 +156,19 @@ void parseLog(sqlite3 *db){
     }
 
     while(sqlite3_step(stmt) == SQLITE_ROW){
-        int time = sqlite3_column_int(stmt, 0);
+        int time = stoi(AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)), token));
         if(time > logTime) logTime = time;
-        string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        string role = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)); // employee or guest
-        string action = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)); // arrived or left 
-        int roomID = sqlite3_column_int(stmt, 4);
+        string name = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)), token);
+        string role = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)), token); // employee or guest
+        string action = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)), token); // arrived or left 
+        int roomID = stoi(AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4)), token));
 
         // for the -g, -e, -a, -l
         if(!role.empty() && role[0] == '-') role = role.substr(1);
         if(!action.empty() && action[0] == '-') action = action.substr(1);
-
-        map<string, PersonState>& group = (role == "E" ? employees : guests);
+        
+        map<string, PersonState>& group = (strcmp(role.c_str(), "E") == 0) ? employees : guests;
+        cout << "name" << name << " role " << role << " action " << action << " roomID " << roomID << " time " << time << endl;
         PersonState& p = group[name];
 
         if(action == "A"){
@@ -312,7 +357,7 @@ int main(int argc, char *argv[]){
     }
 
     checkToken(db, token);
-    parseLog(db); 
+    parseLog(db, sha256(token)); 
     sqlite3_close(db); 
     
     if (showS)

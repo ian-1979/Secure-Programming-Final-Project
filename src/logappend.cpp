@@ -7,7 +7,13 @@
 #include <sstream>
 #include <sqlite3.h>
 #include <filesystem>
-#include "openssl/sha.h"
+#include <openssl/sha.h>
+#include <openssl/aes.h>
+#include <openssl/rand.h>
+#include <openssl/evp.h>
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
+
 
 using namespace std;
 
@@ -24,29 +30,25 @@ using namespace std;
 // ./logappend -T 5 -K secret -L -E Fred -R 1 log1
 
 // To-do:
-// Check DB exists X
-// Create DB X
-// Process Query to DB X
-// edit check token to look at first column
 // Implement Log File Encryption - AES
-// Implement Input Sanitization? - regex
 
-void ProcessBatchFile(string); 
+// Query Functions
+void ProcessBatchFileDB(string); 
 bool ParseQuery(int, char**);
 void ProcessQuery(int, char**);
-// Debugging Function
-void PrintQuery(int, char**);
 
+// DB Functions
 void CreateDB(string, string);
 bool CheckDBExists(string);
 bool CheckDBToken(string, string);
-//static int callback(void*, int, char**, char**);
 string sha256(const std::string);
+string AESEncryptDB(string, string);
+string AESDecryptDB(string, string);
 
-// deprecated
-bool CheckToken(string, string);
-bool CheckLogExists(string);
-void CreateLog(string, string);
+
+
+// Debugging Function
+void PrintQuery(int, char**);
 
 
 
@@ -55,7 +57,7 @@ int main(int argc, char* argv[])
     //check if query is batch file
     if(strcmp(argv[1], "-B") == 0)
     {
-        ProcessBatchFile(argv[2]);
+        ProcessBatchFileDB(argv[2]);
     }
 
     //check if normal query and valid
@@ -67,6 +69,7 @@ int main(int argc, char* argv[])
         }
         else 
         {
+            
             //valid query, check if log file exists
             if (CheckDBExists(argv[10]) == false)
             {
@@ -74,88 +77,32 @@ int main(int argc, char* argv[])
                 // first entry in db is a blank entry that only contains the token
                 CreateDB(argv[10], sha256(argv[4]));
                 ProcessQuery(argc, argv);
-            }else
+            }
+            else
+            // log files exists, check if token is valid
             {
                 if (CheckDBToken(argv[10], sha256(argv[4])) == false)
                 {
                     cout << "Error: Invalid Token" << endl;
+                }else
+                {
+                    ProcessQuery(argc, argv);
                 }
             }
         }
-    }
-
-} 
-
-/*
-    ==========OLD MAIN==========
-
-    //check if query is batch file
-    if(strcmp(argv[1], "-B") == 0)
-    {
-        ProcessBatchFile(argv[2]);
-    } 
-    //check if normal query
-    else if(strcmp(argv[1], "-T") == 0)
-    {
-        //check if query is valid
-        if (ParseQuery(argc, argv) == false)
-        {
-            cout << "Error: Invalid Query" << endl;
-        }
-        else 
-        {
-            //valid query, check if log file exists
-            if (CheckLogExists(argv[10]) == false)
-            {
-                //create log file with token
-                //CreateLog(argv[10], sha256(argv[4]));
-                CreateDB(argv[10], sha256(argv[4]));
-                //write query to log file
-                ofstream file;
-                file.open(string(argv[10]) + ".txt", std::ios::app);
-                for (int i = 1; i < argc; i++)
-                {
-                    file << argv[i] << " ";
-                }
-                file << endl;
-                file.close();
-            }
-            else 
-            {
-                //log file exists, check token, then write query to log file
-                // ===LATER=== if valid, check if the logic is consistent (going back in time, leaving a room never entered)
-                //for now, if valid write to log file
-                if (CheckToken(argv[10], sha256(argv[4])) == false)
-                {
-                    cout << "Error: Invalid Token" << endl;
-                }
-                else
-                {
-                    ofstream file;
-                    file.open(string(argv[10]) + ".txt", std::ios::app);
-                    for (int i = 1; i < argc; i++)
-                    {
-                        file << argv[i] << " ";
-                    }
-                    file << endl;
-                    file.close();
-                }
-            }
-        }
-    } else
+    } else 
     {
         cout << "Error: Invalid Query" << endl;
     }
+} 
 
-*/
-
-void ProcessBatchFile(string batchName)
+void ProcessBatchFileDB(string batchName)
 {
     // -B <file>
     // batch file, contains list of commands without logappend beginning
     // -B cannot appear within the batch file
     //cout << batchName << endl;
-    ifstream file(batchName);
+     ifstream file(batchName);
     string line;
     while (getline(file, line))
     {
@@ -177,55 +124,30 @@ void ProcessBatchFile(string batchName)
         {
             cout << "Error: Invalid Query in Batch File" << endl;
         }
-        else 
+        else
         {
             //valid query, check if log file exists
-            if (CheckLogExists(args[10]) == false)
+            if (CheckDBExists(args[10]) == false)
             {
-                //create log file with token
-                CreateLog(args[10], sha256(args[4]));
-                //write query to log file
-                cout << "Writing to new log file: " << args[10] << endl;
-                ofstream logfile;
-                logfile.open(string(args[10]) + ".txt", std::ios::app);
-                for (int i = 0; i < argc; i++)
-                {
-                    logfile << args[i] << " ";
-                }
-                logfile << endl;
-                logfile.close();
+                CreateDB(args[10], sha256(args[4]));
+                ProcessQuery(argc, args);
             }
-            else 
+            else
             {
-                //log file exists, check token, then write query to log file
-                if (CheckToken(args[10], sha256(args[4])) == false)
+                // log files exists, check if token is valid
+                if (CheckDBToken(args[10], sha256(args[4])) == false)
                 {
-                    cout << "Error: Invalid Token in Batch File" << endl;
-                }
-                else
+                    cout << "Error: Invalid Token" << endl;
+                }else
                 {
-                    ofstream logfile;
-                    logfile.open(string(args[10]) + ".txt", std::ios::app);
-                    for (int i = 0; i < argc; i++)
-                    {
-                        logfile << args[i] << " ";
-                    }
-                    logfile << endl;
-                    logfile.close();
+                    ProcessQuery(argc, args);
                 }
             }
         }
     }
-    
-    file.close();
 }
 
 int callbackB(void *data, int count, char **argv, char **columnNames){
-    //1st parameter of this function is received from 4th parameter of sqlite3_exec
-    //count -> is the number of columns
-    //columnNames ->  array of pointers to strings where each entry represents the name of corresponding result column as obtained
-    //argv -> array of pointers to strings obtained as if from [sqlite3_column_text()]
-
    int i;
    for(i = 0; i<count; i++) {
       printf("Col: %s = %s\n", columnNames[i], argv[i]);
@@ -240,6 +162,7 @@ static int callbackC(void *count, int argc, char **argv, char **azColName) {
     return 0;
 }
 
+// Process query and add it to db
 void ProcessQuery(int argc, char* query[])
 {
     //SQL variables
@@ -249,12 +172,12 @@ void ProcessQuery(int argc, char* query[])
     int count = 0;
 
     //query variables
-    string time = query[2];
+    string time = AESEncryptDB(query[2], sha256(query[4]));
     string token = sha256(query[4]);
-    string AL = query[5];
-    string name = query[7];
-    string EG = query[6];
-    string roomid = query[9];
+    string AL = AESEncryptDB(query[5], sha256(query[4]));
+    string name = AESEncryptDB(query[7], sha256(query[4])); 
+    string EG = AESEncryptDB(query[6], sha256(query[4])); 
+    string roomid = AESEncryptDB(query[9], sha256(query[4]));
 
     std::cout << "filename: " << query[10] << std::endl;
 
@@ -267,13 +190,103 @@ void ProcessQuery(int argc, char* query[])
                 "VALUES("+std::to_string(count)+",'"+token+"','"+time+"','"+name+"','"+EG+"','"+AL+"','"+roomid+"')";
     
     rc = sqlite3_exec(db, sql.c_str(), callbackC, 0, &errMsg);
+}
 
+// Encrypt ptext with AES using token as key
+string AESEncryptDB(string ptxt, string token)
+{
+    string ctxt = "";
     
+    // key and iv initialization
+    unsigned char key[32];
+    unsigned char iv[AES_BLOCK_SIZE];
+    memcpy(key, token.substr(0, 32).c_str(), 32);
+    memcpy(iv, token.substr(32, 16).c_str(), AES_BLOCK_SIZE);
+
+    // AES encryption using EVP_EncryptInit_ex
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
+    
+    unsigned char ciphertext[128];
+    int len;
+    EVP_EncryptUpdate(ctx, ciphertext, &len, (unsigned char*)ptxt.c_str(), ptxt.length());
+    int ciphertext_len = len;
+
+    EVP_EncryptFinal_ex(ctx, ciphertext + len, &len);
+    ciphertext_len += len;
+
+    // Base64 encode the ciphertext
+    BIO *bio, *b64;
+    BUF_MEM *bptr;
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_new(BIO_s_mem());
+    bio = BIO_push(b64, bio);
+    BIO_write(bio, ciphertext, ciphertext_len);
+    BIO_flush(bio);
+    BIO_get_mem_ptr(bio, &bptr);
+    ctxt = string(bptr->data, bptr->length);
+    BIO_free_all(bio);
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ctxt;    
+}
+
+string AESDecryptDB(string ctxt, string token)
+{
+    string ptxt = "";
+    
+    // key and iv initialization
+    unsigned char key[32];
+    unsigned char iv[AES_BLOCK_SIZE];
+    memcpy(key, token.substr(0, 32).c_str(), 32);
+    memcpy(iv, token.substr(32, 16).c_str(), AES_BLOCK_SIZE);
+
+    // Base64 decode the ciphertext
+    BIO *bio, *b64;
+    unsigned char decoded_ctxt[128];
+    int decoded_len;
+
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_new_mem_buf(ctxt.c_str(), ctxt.length());
+    bio = BIO_push(b64, bio);
+    decoded_len = BIO_read(bio, decoded_ctxt, sizeof(decoded_ctxt));
+    BIO_free_all(bio);
+
+    // AES decryption using EVP_DecryptInit_ex
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv);
+    
+    unsigned char plaintext[128];
+    int len;
+    EVP_DecryptUpdate(ctx, plaintext, &len, decoded_ctxt, decoded_len);
+    int plaintext_len = len;
+
+    EVP_DecryptFinal_ex(ctx, plaintext + len, &len);
+    plaintext_len += len;
+
+    ptxt = string((char*)plaintext, plaintext_len);
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ptxt;    
 }
 
 // Make sure that query is valid before writing to log file
 bool ParseQuery(int argc, char* query[]){
     bool valid = true;
+
+    //check for invalid characters such as ' " ; ( ) * ^ ! [ ]
+    string bannedChar = "\"\'();*&^![]=";
+
+    for(int a = 0; a < bannedChar.length(); a++)
+    {
+        for(int b = 0; b < argc; b++)
+        {
+            if(string(query[b]).find(bannedChar[a]) != std::string::npos)
+            {
+                cout << "Error - Invalid Query: Invalid Character In Query" << endl;
+            }
+        }
+    }
 
     //cout << "argc: " << argc << endl;
 
@@ -288,6 +301,8 @@ bool ParseQuery(int argc, char* query[]){
         cout << "Error - Invalid Query: Too Many Arguments" << endl;
         return false;
     }
+
+    
 
     // -T <timestamp>
     // time is measured in seconds since the gallery opened
@@ -337,27 +352,7 @@ bool ParseQuery(int argc, char* query[]){
     return true;
 }
 
-// check if query token matches log file token
-// hash token, compare against first line of log file
-bool CheckToken(string logName, string k) 
-{
-    ifstream file;
-    file.open(logName + ".txt");
-    string token;
-    if(getline(file, token))
-    {
-        if(strcmp(token.c_str(), k.c_str()) != 0)
-        {
-            cout << "Error: Token does not match log file token" << endl;
-            cout << "Log Token: " << token << endl;
-            cout << "Provided Token: " << k << endl;
-            file.close();
-            return false;
-        }
-    }
-    return true;
-}
-
+// Checks user token against token in db
 bool CheckDBToken(string dbname, string k)
 {
     bool valid = false;
@@ -385,18 +380,17 @@ bool CheckDBToken(string dbname, string k)
         std::cerr << "No rows found or error executing query" << std::endl;
     }
     
-
+    
     if(strcmp(tk.c_str(), k.c_str()) != 0)
     {
         cout << "Error: Token does not match log file token" << endl;
-        cout << "Log Token: " << tk << endl;
-        cout << "Provided Token: " << k << endl;
+        //cout << "Log Token: " << tk << endl;
+        //cout << "Provided Token: " << k << endl;
         valid = false;
     }else
     {
-        std::cout << "they same :)" << std::endl;
-        cout << "Log Token: " << tk << endl;
-        cout << "Provided Token: " << k << endl;
+        //cout << "Log Token: " << tk << endl;
+        //cout << "Provided Token: " << k << endl;
         valid = true;
     }
     
@@ -405,49 +399,13 @@ bool CheckDBToken(string dbname, string k)
     return valid;
 }
 
-// check if log file specified exists, if not, create log file and assign token
-bool CheckLogExists(string fname) 
-{
-    ifstream file;
-    file.open(fname + ".txt");
-    if (!file)
-    {
-        cout << "Log file does not exist, creating new log file..." << fname << endl;
-        return false;
-    }
-    else 
-    {
-        cout << "Log file exists: " << fname << endl;
-        file.close();
-        return true;
-    }
-}
-
 // check if database exists
 bool CheckDBExists(string dbname)
 {
     return std::filesystem::exists(dbname + ".db");
 }
 
-// create log file with specified token
-// set hash as first line of log
-void CreateLog(string fname, string token) 
-{
-    ofstream file;
-    file.open(fname + ".txt");
-    if (!file)
-    {
-        cout << "Error: Could not create log file " << fname << endl;
-    }
-    else 
-    {
-        file << token << endl;
-        cout << "Log file created: " << fname << endl;
-        file.close();
-    }
-}
-
-
+// Create database
 void CreateDB(string dbname, string token)
 {
     sqlite3 *db;
@@ -463,13 +421,13 @@ void CreateDB(string dbname, string token)
     }
 
     string sql = "CREATE TABLE LOGFILE("  \
-      "ID INT PRIMARY KEY," \
+      "ID CHAR(64) PRIMARY KEY," \
       "TOKEN CHAR(128)," \
-      "TIME           INT," \
-      "NAME            CHAR(50)," \
-      "EG        CHAR(10)," \
-      "AL       CHAR(10)," \
-      "ROOMID          INT);";
+      "TIME           CHAR(64)," \
+      "NAME            CHAR(64)," \
+      "EG        CHAR(64)," \
+      "AL       CHAR(64)," \
+      "ROOMID          CHAR(64));";
 
     rc = sqlite3_exec(db, sql.c_str(), callbackC, 0, &errMsg);
    
