@@ -1,7 +1,0 @@
--T 5 -K secret -L -E Fred -R 1 log1
--T 6 -K secret -A -E Fred -R 2 log1
--T 7 -K secret -L -E Fred -R 2 log1
--T 8 -K secret -A -E Fred -R 3 log1
--T 9 -K secret -L -E Fred -R 3 log1
--T 10 -K secret -A -E Fred -R 1 log1
--T 11 -A -E Fred -R 1 log1 # this will throw error, missing auth token
