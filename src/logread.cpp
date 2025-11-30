@@ -168,7 +168,6 @@ void parseLog(sqlite3 *db, string token){
         if(!action.empty() && action[0] == '-') action = action.substr(1);
         
         map<string, PersonState>& group = (strcmp(role.c_str(), "E") == 0) ? employees : guests;
-        cout << "name" << name << " role " << role << " action " << action << " roomID " << roomID << " time " << time << endl;
         PersonState& p = group[name];
 
         if(action == "A"){
@@ -336,7 +335,7 @@ int main(int argc, char *argv[]){
             name = argv[++i];
         }
         else if (arg[0] != '-'){
-            logFile = arg;
+            logFile = arg + ".db";
         }
     }
 
