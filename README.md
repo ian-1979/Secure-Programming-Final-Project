@@ -1,8 +1,5 @@
 # Secure Programming Final Project - Phase 3
-
-## Group Infromation 
-
-Group #5: Adrion Thomas and Ian Scheetz
+## Group #5: Adrion Thomas and Ian Scheetz
 
 ## Libraries Used 
 
@@ -13,29 +10,29 @@ Group #5: Adrion Thomas and Ian Scheetz
 
 ### Logappend
 
-**Build Commands:**
+Build Commands:
 g++ -o logappend logappend.cpp -lssl -lcrypto -lsqlite3
 ./logappend <query>
 
-**Query Format:**
+Query Format:
 ./logappend -T <timestamp> -K <token> (-E <employee-name> | -G <guest-name>) (-A | -L) [-R <room-id>] <log>
 ./logappend -B <file>
 
-**Example Queries:**
+Example Queries:
 ./logappend -T 5 -K secret -A -E Fred -R 1 log1
 ./logappend -T 10 -K secret -L -G Alice -R 1 log1
 
 ### Logread
 
-**Build Commands:**
+Build Commands:
 g++ -o logread logread.cpp -lssl -lcrypto -lsqlite3
 ./logread <query>
 
-**Query Format:**
+Query Format:
 logread -K <token> -S <log>
 logread -K <token> -R (-E <name> | -G <name>) <log>
 
-**Example Queries:**
+Example Queries:
 ./logread -K secret -S log1
 ./logread -K secret -R -E Fred log1
 
