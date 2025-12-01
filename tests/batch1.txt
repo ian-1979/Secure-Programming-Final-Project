@@ -1,5 +1,10 @@
--T 5 -K secret -A -E Fred -R 1 log1
--T 10 -K secret -L -E Fred -R 1 log1
--T 10 -K secret -A -E Fred -R 2 log1
--T 15 -K secret -L -E Fred -R 2 log1
--T 15 -K secret -A -E Fred -R 1 log1
+-T 1 -K secret -A -E Bob -R 1 log1
+-T 2 -K secret -L -E Bob -R 1 log1
+-T 3 -K secret -A -E Bob -R 2 log1
+-T 4 -K secret -L -E Bob -R 2 log1
+-T 5 -K secret -A -E Bob -R 1 log1
+-T 5 -K secret -A -G Alice -R 1 log1
+-T 6 -K secret -L -G Alice -R 1 log1
+-T 7 -K secret -A -G Alice -R 2 log1
+-T 8 -K secret -L -G Alice -R 2 log1
+-T 9 -K secret -A -G Alice -R 3 log1

@@ -1,0 +1,9 @@
+-T 1 -K secret -A -E Bob -R 1 log1
+-T 2 -K password -A -G Alice -R 1 log1
+-T 3 -A -G Alice -R 1 log1
+-T 4 -K secret -A -G Alice log1
+-T 5 -K secret -G Alice -R 1 log1
+-T 6 -K secret -G Alice -R 1
+-T 7 -K password -A -G Alice -R 1 log2
+-K secret -G Alice -R 1 log1
+-B alice.txt

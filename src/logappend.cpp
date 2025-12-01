@@ -56,6 +56,7 @@ int main(int argc, char* argv[])
     //check if query is batch file
     if(strcmp(argv[1], "-B") == 0)
     {
+        cout << argv[2] << endl;
         ProcessBatchFileDB(argv[2]);
     }
 
@@ -101,9 +102,14 @@ void ProcessBatchFileDB(string batchName)
     // -B <file>
     // batch file, contains list of commands without logappend beginning
     // -B cannot appear within the batch file
-     ifstream file(batchName);
+    ifstream input(batchName);
+    if (!input.is_open())
+    {
+        cout << "Error: Could not open batch file" << endl;
+        return;
+    }
     string line;
-    while (getline(file, line))
+    while (getline(input, line))
     {
         cout << "Processing line: " << line << endl;
         //split line into arguments

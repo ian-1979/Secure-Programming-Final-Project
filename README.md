@@ -67,3 +67,6 @@ Example Queries:\
 
 ## Test Suite Instructions
 
+### Logappend.cpp
+
+
