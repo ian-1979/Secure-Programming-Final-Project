@@ -32,7 +32,7 @@ extern std::map<std::string, PersonState> employees;
 extern std::map<std::string, PersonState> guests;
 
 // ---------------------------
-// Function Declarations
+// function declarations
 // ---------------------------
 
 // security / cryptography

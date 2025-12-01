@@ -137,47 +137,72 @@ void parseLog(sqlite3 *db, string token){
         printInvalid(); 
     }
 
-    while(sqlite3_step(stmt) == SQLITE_ROW){
+while(sqlite3_step(stmt) == SQLITE_ROW){
+    try {
         // decrypt database 
-        int time = stoi(AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)), token));
-        if(time > logTime) logTime = time; // update global time checker 
-        string name = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)), token);
-        string role = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)), token); // employee or guest
-        string action = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)), token); // arrived or left 
-        int roomID = stoi(AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4)), token));
+        const unsigned char* tCol = sqlite3_column_text(stmt, 0);
+        const unsigned char* nCol = sqlite3_column_text(stmt, 1);
+        const unsigned char* rCol = sqlite3_column_text(stmt, 2);
+        const unsigned char* aCol = sqlite3_column_text(stmt, 3);
+        const unsigned char* rmCol = sqlite3_column_text(stmt, 4);
 
-        // for the -g, -e, -a, -l.. remove if present 
+        // Skip if any column is NULL or empty
+        if (!tCol || !nCol || !rCol || !aCol || !rmCol) {
+            continue; // malformed row
+        }
+
+        string timeStr = AESDecryptDB((const char*)tCol, token);
+        string name    = AESDecryptDB((const char*)nCol, token);
+        string role    = AESDecryptDB((const char*)rCol, token);
+        string action  = AESDecryptDB((const char*)aCol, token);
+        string roomStr = AESDecryptDB((const char*)rmCol, token);
+
+        // stoi may throw → this try/catch will capture it
+        int time = stoi(timeStr);
+        int roomID = stoi(roomStr);
+
+        if(time > logTime) logTime = time;
+
+        // remove leading '-' if present
         if(!role.empty() && role[0] == '-') role = role.substr(1);
         if(!action.empty() && action[0] == '-') action = action.substr(1);
-        
-        // if role contains an "E", person is an employee, if not.. they are a guest. 
-        map<string, PersonState>& group = (strcmp(role.c_str(), "E") == 0) ? employees : guests;
+
+        // determine guest or employee
+        map<string, PersonState>& group =
+            (strcmp(role.c_str(), "E") == 0) ? employees : guests;
         PersonState& p = group[name];
 
-        // arrived 
-        if(action == "A"){
-                if(!p.inGallery){ // if not already set in gallery but has arrived, set inGallery to true
-                    p.inGallery = true; 
-                    p.entryTime = time; 
-                }
-                for (auto& rr : p.inRoom) rr.second = false; // reset previous rooms
-                p.inRoom[roomID] = true;
-                if (find(p.roomsVisited.begin(), p.roomsVisited.end(), roomID) == p.roomsVisited.end()) {
-                    p.roomsVisited.push_back(roomID); // record the room for person
-                }            
-                // leaving
-            } else if (action == "L"){
-                if(p.inGallery && p.entryTime > 0){
-                    p.totalTimeSpent += (time - p.entryTime); // add total time
-                    p.entryTime = 0; 
-                }
-                p.inGallery = false; 
-                for (auto& rr : p.inRoom) rr.second = false;
-            } else {
-                // person left room, just in case else if doesn't work
-                p.inRoom[roomID] = false; 
+        // ARRIVED
+        if(action == "A") {
+            if(!p.inGallery){
+                p.inGallery = true;
+                p.entryTime = time;
+            }
+            p.inRoom.clear(); 
+            p.inRoom[roomID] = true;
+
+            if (find(p.roomsVisited.begin(), p.roomsVisited.end(), roomID)
+                == p.roomsVisited.end()) 
+            {
+                p.roomsVisited.push_back(roomID);
             }
         }
+        // LEFT
+        else if(action == "L") {
+            if(p.inGallery && p.entryTime > 0){
+                p.totalTimeSpent += (time - p.entryTime);
+                p.entryTime = 0;
+            }
+            p.inGallery = false;
+            p.inRoom.clear(); 
+        }
+
+    } catch (...) {
+        // If ANYTHING goes wrong, skip the row
+        continue;
+    }
+}
+
 
     sqlite3_finalize(stmt); 
 }

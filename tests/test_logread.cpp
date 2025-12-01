@@ -8,10 +8,6 @@ using namespace std;
 // Build Commands: 
 // MUST BE IN PROJECT ROOT TO RUN TESTS!
 // g++ -std=c++17 -g test_logread.cpp -o test_logread -lssl -lcrypto -lsqlite3
-// g++ -std=c++17 -I/opt/homebrew/opt/openssl@3/include \   
-    // -L/opt/homebrew/opt/openssl@3/lib \
-    // -g src/logread.cpp tests/test_logread.cpp -o test_logread \
-    // -lssl -lcrypto -lsqlite3
 
 
 // Helper function for printing test results
