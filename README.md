@@ -65,8 +65,16 @@ Example Queries:\
 ## Logread Documentation
 
 
+
+
 ## Test Suite Instructions
 
 ### Logappend.cpp
 
+Within the tests folder there are two batch files. These each contain various queries. Batch1.txt contains only valid queries. Batch2.txt contains two valid queries and seven invalid queries. Running batch2.txt will result in the creation of two .db files, log1.db and log2.db. Each db file will only contain one entry.
 
+Command to run the batch files:\
+`./logappend -B ../tests/batch1.txt`\
+`./logappend -B ../tests/batch2.txt`\
+
+### Logread.cpp
