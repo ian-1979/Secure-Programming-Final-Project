@@ -76,5 +76,9 @@ Within the tests folder there are two batch files. These each contain various qu
 Command to run the batch files:\
 `./logappend -B ../tests/batch1.txt`\
 `./logappend -B ../tests/batch2.txt`\
+\
+Alternatively, each individual line of the batch files can be run by prepending `./logappend`\
+Example:\
+`./logappend -T 5 -K secret -A -G Alice -R 1 log1`\
 
 ### Logread.cpp
