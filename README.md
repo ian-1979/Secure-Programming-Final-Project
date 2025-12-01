@@ -25,7 +25,7 @@ Example Queries:\
 ### Logread
 
 Build Commands:\
-`g++ -o logread logread.cpp -lssl -lcrypto -lsqlite3`\
+`g++ -o logread logread_main.cpp -lssl -lcrypto -lsqlite3`\
 `./logread <query>`
 
 Query Format:\
@@ -64,7 +64,22 @@ Example Queries:\
 
 ## Logread Documentation
 
+## Key Functions:
+bool checkToken(sqlite3* db, const string& currentToken): Checks if the SHA256 hash of the user-provided token matches the stored hash in the database. 
+void parseLog(sqlite3* db, string token): Reads all non-token entries from the database, decrypts the data, and updates the state of the employees and guests. Tracks arrival and leaving events, updates rooms each person is in or visited, and calculates total time in Gallery.
+void showState() : Displays the current Gallery status which includes the current employees and guests inside and what rooms each person is in.
+void showRooms(const string& name, bool isEmployee): Displays all rooms visited by a specific employee or guest. 
+void showTime(const string& name, bool isEmployee): Displays the total time spent in the Gallery by a specified employee or guest (the person has to leave for the time to be calculated)
 
+## AES Decryption
+string AESDecryptDB(string ctxt, string token): Decrypts a Base64-encoded AES-256 ciphertext by using the key and IV derived from the hashed token. Is able to handle malformed or large inputs without crashing. 
+
+## SHA256 Hashing 
+string sha256(const string inputStr) : Takes an input string and will return it as a hexadecimal string instead. Will be used to ensure that the user-supplied token matches one stored in the database. 
+
+## Utlity Functions: 
+void printInvalid(): Throws an exception if user provides the wrong commands or if information user wants to provide is not already in database. 
+void invalidToken() : Throws an exception if the user provides the wrong token. 
 
 
 ## Test Suite Instructions
@@ -82,3 +97,16 @@ Example:\
 `./logappend -T 5 -K secret -A -G Alice -R 1 log1`
 
 ### Logread.cpp
+Testing for Logread is within the tests folder under test_logread.cpp. 
+1. Token Validation :
+- There are two tests involving the token.. For the first one, if it is the correct token the test will pass. For the latter, if it is the invalid token, it throws an exception which passes the test as it delves with whether or not an exception was thrown. 
+2. AES Decryption:
+- There are two tests about how the AES decryption works on larger and malformed inputs. The malformed Base64 input should not crash the program along with an large input, if it doesn't crash the program, it passes. 
+3. Log Parsing :
+- Malformed log entries should be handled by the program without crashing.
+
+# Command to run tests: 
+`g++ -std=c++17 -g test_logread.cpp -o test_logread -lssl -lcrypto -lsqlite3`
+
+# Run Tests: 
+`./test_logread`
