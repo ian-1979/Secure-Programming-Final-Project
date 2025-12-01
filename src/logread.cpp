@@ -15,63 +15,45 @@
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include "logread.hpp"
 
 using namespace std;
 
-// Build Commands:
-// g++ -o logread logread.cpp -lssl -lcrypto -lsqlite3
-// Usage:
-// ./logread <query>
-
-// Example Queries :
-// logread -K <token> -S <log>
-// logread -K <token> -R (-E <name> | -G <name>) <log>
-
-// Optional Queries :
-// logread -K <token> -T (-E <name> | -G <name>) <log>
-// logread -K <token> -I (-E <name> | -G <name>) [(-E <name> | -G <name>) ...] <log>
-
-struct PersonState{
-    bool inGallery = false;
-    int entryTime = 0;
-    int totalTimeSpent = 0;
-    map<int, bool> inRoom; // roomID -> true/false
-    vector<int> roomsVisited;
-};
-
-string token;
-string logFile;
-int logTime = 0; 
-bool showS = false, showR = false, showT = false; 
-bool isEmployee = false;
+// global variables for command-line arguments
+string token; 
+string logFile; // database file name 
+int logTime = 0;  // tracker for time 
+bool showS = false, showR = false, showT = false; // flags for -S, -R, -T
+bool isEmployee = false; // flag for if person in gallery is employee or guests
 
 
+// state of employees and guests in the gallery
 map<string, PersonState> employees;
 map<string, PersonState> guests;
 
+// ERROR HANDLING 
 void printInvalid(){
-    cout << "invalid" << endl;
-    exit(255);
+    throw runtime_error("INVALID! The information provided is an invalid query or input not found in database."); // invalid input or query
 }
 
 void invalidTok(){
-    cout << "integrity violation" << endl;
-    exit(255);
+    throw runtime_error("INTEGRITY VIOLATION! Token provided is NOT in database, exiting now."); // invalid token, throws an integrity violation
 }
 
 string sha256(const string inputStr){
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    const unsigned char *data = (const unsigned char *)inputStr.c_str();
+    unsigned char hash[SHA256_DIGEST_LENGTH]; // 32-byte buffer for hash
+    const unsigned char *data = (const unsigned char *)inputStr.c_str(); // input as bytes
     SHA256(data, inputStr.size(), hash);
+
+    // convert binary hash to a hex string
     stringstream ss;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++){
         ss << hex << setw(2) << setfill('0') << (int)hash[i];
     }
-    return ss.str();
+    return ss.str(); // return hash as string
 }
 
-string AESDecryptDB(string ctxt, string token)
-{
+string AESDecryptDB(string ctxt, string token){
     string ptxt = "";
     
     // key and iv initialization
@@ -109,6 +91,7 @@ string AESDecryptDB(string ctxt, string token)
     return ptxt;    
 }
 
+// verify if the user token is stored in DB
 bool checkToken(sqlite3 *db, const string &currentToken){
     const char *sql = "SELECT TOKEN FROM LOGFILE WHERE ID = 0";
     sqlite3_stmt *stmt;
@@ -128,21 +111,20 @@ bool checkToken(sqlite3 *db, const string &currentToken){
     }
     else{
         sqlite3_finalize(stmt);
-        invalidTok(); // no row found
+        invalidTok(); // no token found
     }
 
     sqlite3_finalize(stmt);
 
+    // hash user input and compare
     string givenHash = sha256(currentToken);
-
     if (strcmp(storedHash.c_str(), givenHash.c_str()) != 0){
-        invalidTok();
+        invalidTok(); // token does not match!
     }
-
     return true;
 }
 
-// Parse Log
+// Parse Log and Update Gallery States
 void parseLog(sqlite3 *db, string token){
     const char *sql =
         "SELECT TIME, NAME, EG, AL, ROOMID "
@@ -156,61 +138,67 @@ void parseLog(sqlite3 *db, string token){
     }
 
     while(sqlite3_step(stmt) == SQLITE_ROW){
+        // decrypt database 
         int time = stoi(AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)), token));
-        if(time > logTime) logTime = time;
+        if(time > logTime) logTime = time; // update global time checker 
         string name = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)), token);
         string role = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2)), token); // employee or guest
         string action = AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3)), token); // arrived or left 
         int roomID = stoi(AESDecryptDB(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4)), token));
 
-        // for the -g, -e, -a, -l
+        // for the -g, -e, -a, -l.. remove if present 
         if(!role.empty() && role[0] == '-') role = role.substr(1);
         if(!action.empty() && action[0] == '-') action = action.substr(1);
         
+        // if role contains an "E", person is an employee, if not.. they are a guest. 
         map<string, PersonState>& group = (strcmp(role.c_str(), "E") == 0) ? employees : guests;
         PersonState& p = group[name];
 
+        // arrived 
         if(action == "A"){
-            if(roomID == 0){
-                if(!p.inGallery){
+                if(!p.inGallery){ // if not already set in gallery but has arrived, set inGallery to true
                     p.inGallery = true; 
                     p.entryTime = time; 
                 }
-            } else {
-                p.inRoom[roomID] = true; 
-            }
-            p.roomsVisited.push_back(roomID); 
-        } else if(action == "L"){
-            if(roomID == 0){
+                for (auto& rr : p.inRoom) rr.second = false; // reset previous rooms
+                p.inRoom[roomID] = true;
+                if (find(p.roomsVisited.begin(), p.roomsVisited.end(), roomID) == p.roomsVisited.end()) {
+                    p.roomsVisited.push_back(roomID); // record the room for person
+                }            
+                // leaving
+            } else if (action == "L"){
                 if(p.inGallery && p.entryTime > 0){
-                    p.totalTimeSpent += (time - p.entryTime);
+                    p.totalTimeSpent += (time - p.entryTime); // add total time
                     p.entryTime = 0; 
                 }
                 p.inGallery = false; 
                 for (auto& rr : p.inRoom) rr.second = false;
             } else {
+                // person left room, just in case else if doesn't work
                 p.inRoom[roomID] = false; 
             }
         }
-    }
+
     sqlite3_finalize(stmt); 
 }
 
-// Employee/Guest Search
+// shows current state of Gallery
 void showState(){
     vector<string> employeeNames, guestNames;
+    // gather employees
     for (auto &[name, p] : employees){
         if (p.inGallery){
             employeeNames.push_back(name);
         }
     }
-
+    // gather guests
     for (auto &[name, p] : guests){
         if (p.inGallery){
             guestNames.push_back(name);
         }
     }
 
+    // sorting names alphabetically
     sort(employeeNames.begin(), employeeNames.end());
     sort(guestNames.begin(), guestNames.end());
 
@@ -232,6 +220,8 @@ void showState(){
     }
     cout << "\n";
 
+    
+    // room employees are in
     map<int, vector<string>> rooms;
     for (auto &[name, p] : employees){
         for (auto &[r, inside] : p.inRoom){
@@ -240,7 +230,7 @@ void showState(){
             }
         }
     }
-
+    // room guests are in
     for (auto &[name, p] : guests){
         for (auto &[r, inside] : p.inRoom){
             if (inside){
@@ -249,6 +239,7 @@ void showState(){
         }
     }
 
+    // what exact room people are in, printing
     for (auto &[room, names] : rooms){
         sort(names.begin(), names.end());
         cout << "Room " << room << ": ";
@@ -262,12 +253,14 @@ void showState(){
     }
 }
 
-// Room Status
+// all rooms visited by someone
 void showRooms(const string &name, bool isEmployee){
     auto &group = (isEmployee ? employees : guests);
     auto it = group.find(name);
+
     if (it == group.end()){
-        return;
+        cout << "PERSON NOT FOUND, TRY AGAIN." << endl; 
+        return; 
     }
 
     auto &rooms = it->second.roomsVisited;
@@ -280,16 +273,21 @@ void showRooms(const string &name, bool isEmployee){
     cout << "\n";
 }
 
+// total time spent in gallery by a person, 
+// person has to leave room for total time to be calculated
 void showTime(const string &name, bool isEmployee){
     auto &group = (isEmployee ? employees : guests);
     auto it = group.find(name);
+
     if(it == group.end()){
+        cout << "PERSON NOT FOUND, TRY AGAIN." << endl; 
         return;
     }
 
     PersonState &p = it -> second; 
     int timeSpent = p.totalTimeSpent;
 
+    // if currently in gallery, add ongoing time 
     if(p.inGallery && p.entryTime > 0){
         timeSpent += (logTime - p.entryTime);
     }
@@ -297,72 +295,4 @@ void showTime(const string &name, bool isEmployee){
     cout << timeSpent << "\n"; 
 }
 
-// Parse Query
-int main(int argc, char *argv[]){
-    if (argc < 4){
-        std::cout << "not enough args" << std::endl;
-        printInvalid();
-    }
 
-    bool showS = false, showR = false;
-    bool isEmployee = false;
-    string name;
-
-    for (int i = 0; i < argc; ++i){
-        string arg = argv[i];
-        if (arg == "-K"){
-            if (i + 1 >= argc){
-                std::cout << "token missing" << std::endl;
-                printInvalid();
-            }
-            token = argv[++i];
-        }
-        else if (arg == "-S"){
-            showS = true;
-        }
-        else if (arg == "-R"){
-            showR = true;
-        }
-        else if(arg == "-T"){
-            showT = true; 
-        }
-        else if (arg == "-E" || arg == "-G"){
-            isEmployee = (arg == "-E");
-            if (i + 1 >= argc){
-                printInvalid();
-                std::cout << "name missing" << std::endl;
-            }
-            name = argv[++i];
-        }
-        else if (arg[0] != '-'){
-            logFile = arg + ".db";
-        }
-    }
-
-    if (token.empty() || logFile.empty()){
-        printInvalid();
-        std::cout << "log or token empty" << std::endl;
-    }
-
-    if (!showS && !showR && !showT){
-        printInvalid();
-        std::cout << "no action specified" << std::endl;
-    }
-
-    sqlite3* db;
-
-    if (sqlite3_open(logFile.c_str(), &db) != SQLITE_OK){
-        printInvalid();
-    }
-
-    checkToken(db, token);
-    parseLog(db, sha256(token)); 
-    sqlite3_close(db); 
-    
-    if (showS)
-        showState();
-    if (showR)
-        showRooms(name, isEmployee);
-    if(showT)
-        showTime(name, isEmployee); 
-}
