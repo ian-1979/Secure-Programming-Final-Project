@@ -79,6 +79,6 @@ Command to run the batch files:\
 \
 Alternatively, each individual line of the batch files can be run by prepending `./logappend`\
 Example:\
-`./logappend -T 5 -K secret -A -G Alice -R 1 log1`\
+`./logappend -T 5 -K secret -A -G Alice -R 1 log1`
 
 ### Logread.cpp
