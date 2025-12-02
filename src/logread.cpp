@@ -130,7 +130,7 @@ void parseLog(sqlite3 *db, string token){
         "SELECT TIME, NAME, EG, AL, ROOMID "
         "FROM LOGFILE "
         "WHERE ID != 0 "
-        "ORDER BY TIME ASC";
+        "ORDER BY CAST(TIME AS INTEGER) ASC";
     
     sqlite3_stmt* stmt; 
     if(sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK){
@@ -174,28 +174,54 @@ while(sqlite3_step(stmt) == SQLITE_ROW){
 
         // ARRIVED
         if(action == "A") {
+            p.inRoom[roomID] = true;
+
             if(!p.inGallery){
                 p.inGallery = true;
                 p.entryTime = time;
             }
-            p.inRoom.clear(); 
-            p.inRoom[roomID] = true;
 
-            if (find(p.roomsVisited.begin(), p.roomsVisited.end(), roomID)
-                == p.roomsVisited.end()) 
-            {
+            if (find(p.roomsVisited.begin(), p.roomsVisited.end(), roomID) == p.roomsVisited.end()){
                 p.roomsVisited.push_back(roomID);
             }
         }
         // LEFT
         else if(action == "L") {
-            if(p.inGallery && p.entryTime > 0){
-                p.totalTimeSpent += (time - p.entryTime);
-                p.entryTime = 0;
+            // cout << "DEBUG - " << name << " leaving room " << roomID << endl;
+            // cout << "DEBUG - Before erase: ";
+            // for (auto& [r, inside] : p.inRoom) {
+            //     cout << "Room " << r << ": " << inside << ", ";
+            // }
+            // cout << endl;
+            
+            p.inRoom.erase(roomID);
+            
+            // cout << "DEBUG - After erase: ";
+            // for (auto& [r, inside] : p.inRoom) {
+            //     cout << "Room " << r << ": " << inside << ", ";
+            // }
+            bool inAnyRoom = false;
+            for (const auto &roomStatus : p.inRoom) {
+                if (roomStatus.second) { // if value is 'true'
+                    inAnyRoom = true;
+                    break;
+                }
             }
-            p.inGallery = false;
-            p.inRoom.clear(); 
+
+            if (!inAnyRoom) {
+                if (p.inGallery && p.entryTime > 0) {
+                    p.totalTimeSpent += (time - p.entryTime);
+                    p.entryTime = 0;
+                }
+
+                p.inGallery = false;
+                // p.inRoom.clear();            
+
+            }
         }
+                // Inside the try block, after parsing:
+        // cout << "DEBUG - Processing: time=" << time << ", name=" << name 
+        //     << ", action=" << action << ", roomID=" << roomID << endl;
 
     } catch (...) {
         // If ANYTHING goes wrong, skip the row
@@ -212,12 +238,14 @@ void showState(){
     vector<string> employeeNames, guestNames;
     // gather employees
     for (auto &[name, p] : employees){
+        if (!p.inGallery) continue;
         if (p.inGallery){
             employeeNames.push_back(name);
         }
     }
     // gather guests
     for (auto &[name, p] : guests){
+        if (!p.inGallery) continue;
         if (p.inGallery){
             guestNames.push_back(name);
         }
@@ -249,18 +277,22 @@ void showState(){
     // room employees are in
     map<int, vector<string>> rooms;
     for (auto &[name, p] : employees){
-        for (auto &[r, inside] : p.inRoom){
-            if (inside){
-                rooms[r].push_back(name);
+        if(p.inGallery){
+            for (auto &[r, inside] : p.inRoom){
+                if (inside){
+                    rooms[r].push_back(name);
+                }
             }
         }
     }
     // room guests are in
     for (auto &[name, p] : guests){
-        for (auto &[r, inside] : p.inRoom){
-            if (inside){
-                rooms[r].push_back(name);
-            }
+        if(p.inGallery){
+        for (auto &roomEntry : p.inRoom){
+                    if (roomEntry.second){ // if inside is true
+                        rooms[roomEntry.first].push_back(name);
+                    }
+                }
         }
     }
 
