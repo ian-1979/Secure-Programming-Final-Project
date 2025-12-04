@@ -106,7 +106,7 @@ Testing for Logread is within the tests folder under test_logread.cpp.
 - Malformed log entries should be handled by the program without crashing.
 
 # Command to run tests: 
-`g++ -std=c++17 -g test_logread.cpp -o test_logread -lssl -lcrypto -lsqlite3`
+`g++ -std=c++17 -g ../src/logread.cpp test_logread.cpp -o test_logread -lssl -lcrypto -lsqlite3`
 
 # Run Tests: 
 `./test_logread`
